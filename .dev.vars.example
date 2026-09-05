@@ -1,2 +1,4 @@
 CLAIM_TOKEN_SECRET="dev-only-change-me"
-# ANTHROPIC_API_KEY=""
+# LLM via DGrid gateway (OpenAI-compatible, cheap + free tiers)
+# LLM_API_KEY=""
+# LLM_BASE_URL / LLM_MODEL come from wrangler.jsonc vars

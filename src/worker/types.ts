@@ -7,8 +7,15 @@ export interface Env {
   CASE_DO: DurableObjectNamespace;
   /** HMAC secret for case claim tokens. Set via `wrangler secret put`. */
   CLAIM_TOKEN_SECRET: string;
-  /** LLM key. Set via `wrangler secret put`. Absent in local dev. */
-  ANTHROPIC_API_KEY?: string;
+  /**
+   * LLM provider key (DGrid gateway by default). Secret — `wrangler secret put`.
+   * Absent in local dev, in which case pipeline stages fail closed.
+   */
+  LLM_API_KEY?: string;
+  /** OpenAI-compatible base URL. Default: DGrid gateway. */
+  LLM_BASE_URL: string;
+  /** Model id in `provider/model` form, e.g. `google/gemini-2.5-flash-lite`. */
+  LLM_MODEL: string;
   APP_BASE_URL: string;
   CLAIM_TOKEN_TTL_SECONDS: string;
   MAX_UPLOAD_BYTES: string;

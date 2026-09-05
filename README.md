@@ -36,8 +36,9 @@ pnpm install
 pnpm db:migrate:local
 
 # secrets for local dev (never commit)
-cp .dev.vars.example .dev.vars   # then fill in CLAIM_TOKEN_SECRET
-# ANTHROPIC_API_KEY optional until D2 pipeline lands
+cp .dev.vars.example .dev.vars   # then fill in CLAIM_TOKEN_SECRET + LLM_API_KEY
+# LLM runs through the DGrid gateway (OpenAI-compatible, cheap + free tiers).
+# Default model: google/gemini-2.5-flash-lite (~fractions of a cent per case).
 
 # run API + frontend
 pnpm dev          # Worker on :8787 (serves ./public if built, else API only)
@@ -62,7 +63,7 @@ pnpm deploy:dry     # bundle validation without deploying
 
 ```bash
 wrangler secret put CLAIM_TOKEN_SECRET
-wrangler secret put ANTHROPIC_API_KEY   # needed from D2 on
+wrangler secret put LLM_API_KEY   # DGrid key; needed from D2 on
 pnpm db:migrate:remote
 pnpm deploy
 ```

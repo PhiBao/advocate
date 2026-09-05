@@ -37,7 +37,9 @@
     "APP_BASE_URL": "http://localhost:8787",
     "CLAIM_TOKEN_TTL_SECONDS": "7776000",
     "MAX_UPLOAD_BYTES": "15728640",
-    "DATA_RETENTION_DAYS": "90"
+    "DATA_RETENTION_DAYS": "90",
+    "LLM_BASE_URL": "https://api.dgrid.ai/v1",
+    "LLM_MODEL": "google/gemini-2.5-flash-lite"
   },
   "observability": {
     "enabled": true
