@@ -1,0 +1,31 @@
+{
+  "name": "advocate",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Advocate — the AI advocate that fights your medical bills and claim denials end to end.",
+  "packageManager": "pnpm@11.1.1",
+  "engines": {
+    "node": ">=22"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["esbuild", "workerd"]
+  },
+  "scripts": {
+    "dev": "wrangler dev",
+    "dev:web": "pnpm --filter @advocate/web dev",
+    "build": "pnpm --filter @advocate/web build",
+    "typecheck": "tsc -p tsconfig.worker.json --noEmit && pnpm --filter @advocate/web exec tsc --noEmit",
+    "db:migrate:local": "wrangler d1 migrations apply advocate-db --local",
+    "db:migrate:remote": "wrangler d1 migrations apply advocate-db --remote",
+    "deploy": "pnpm build && wrangler deploy",
+    "deploy:dry": "pnpm build && wrangler deploy --dry-run"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250903.0",
+    "typescript": "~5.9.2",
+    "wrangler": "^4.95.0"
+  },
+  "dependencies": {
+    "hono": "^4.9.7"
+  }
+}

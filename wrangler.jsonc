@@ -1,0 +1,45 @@
+{
+  // Advocate — Cloudflare Worker + static frontend.
+  // Frontend (React/Vite) builds into ./public and is served as static assets.
+  // The Worker handles /api/* (run_worker_first). Everything else falls back
+  // to the SPA (not_found_handling: single-page-application).
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "advocate",
+  "main": "src/worker/index.ts",
+  "compatibility_date": "2025-05-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": "./public",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "advocate-db",
+      "database_id": "dd128a2c-9915-4e47-8203-601b65f0c79e",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "DOCS",
+      // NOTE: R2 must be enabled for the account in the Cloudflare dashboard
+      // before first remote deploy. Local dev (wrangler dev) works without it.
+      "bucket_name": "advocate-docs"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [{ "name": "CASE_DO", "class_name": "CaseAgent" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["CaseAgent"] }],
+  "vars": {
+    "APP_BASE_URL": "http://localhost:8787",
+    "CLAIM_TOKEN_TTL_SECONDS": "7776000",
+    "MAX_UPLOAD_BYTES": "15728640",
+    "DATA_RETENTION_DAYS": "90"
+  },
+  "observability": {
+    "enabled": true
+  }
+}

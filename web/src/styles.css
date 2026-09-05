@@ -1,0 +1,284 @@
+/* Advocate design tokens + base components.
+   Warm paper background, deep ink text, one trustworthy green.
+   Mobile-first: people photograph bills on their phones. */
+
+:root {
+  --bg: #faf8f3;
+  --surface: #ffffff;
+  --ink: #16212e;
+  --ink-soft: #4b5a6c;
+  --ink-faint: #8291a3;
+  --line: #e6e0d4;
+  --accent: #0e7c5b;
+  --accent-deep: #0a5c44;
+  --accent-soft: #e3f2ea;
+  --warn: #9a5b00;
+  --warn-soft: #fdf1dc;
+  --danger: #b3261e;
+  --radius: 14px;
+  --shadow: 0 1px 2px rgb(22 33 46 / 0.06), 0 8px 24px rgb(22 33 46 / 0.08);
+  --font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial,
+    sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--ink);
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: var(--accent-deep);
+}
+
+.wrap {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 0 20px 96px;
+}
+
+.site-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 0;
+}
+
+.brand {
+  font-weight: 800;
+  font-size: 20px;
+  letter-spacing: -0.02em;
+  text-decoration: none;
+  color: var(--ink);
+}
+
+.brand span {
+  color: var(--accent);
+}
+
+.nav-link {
+  font-size: 14px;
+  text-decoration: none;
+}
+
+.hero {
+  padding: 40px 0 8px;
+}
+
+.hero h1 {
+  font-size: clamp(32px, 7vw, 46px);
+  line-height: 1.08;
+  letter-spacing: -0.03em;
+  margin: 0 0 14px;
+}
+
+.hero p {
+  font-size: 18px;
+  color: var(--ink-soft);
+  margin: 0 0 26px;
+  max-width: 34em;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 22px;
+}
+
+.dropzone {
+  border: 2px dashed var(--line);
+  border-radius: var(--radius);
+  padding: 30px 18px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 120ms ease, background 120ms ease;
+  background: var(--bg);
+}
+
+.dropzone:hover,
+.dropzone.dragging {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.dropzone strong {
+  display: block;
+  font-size: 17px;
+  margin-bottom: 4px;
+}
+
+.dropzone small {
+  color: var(--ink-soft);
+}
+
+.btn {
+  display: inline-block;
+  width: 100%;
+  border: 0;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 17px;
+  font-weight: 700;
+  padding: 14px 20px;
+  cursor: pointer;
+  margin-top: 16px;
+  text-align: center;
+  text-decoration: none;
+}
+
+.btn:hover {
+  background: var(--accent-deep);
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.btn.secondary {
+  background: transparent;
+  color: var(--accent-deep);
+  border: 1.5px solid var(--accent);
+}
+
+.privacy-note {
+  display: flex;
+  gap: 10px;
+  margin-top: 14px;
+  font-size: 13.5px;
+  color: var(--ink-soft);
+  background: var(--accent-soft);
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+
+.steps {
+  margin: 34px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 12px;
+}
+
+.steps li {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 14px 16px;
+  font-size: 15px;
+}
+
+.steps li strong {
+  display: block;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--accent-deep);
+  margin-bottom: 2px;
+}
+
+.error-box {
+  margin-top: 14px;
+  background: #fdecea;
+  border: 1px solid #f3c1bd;
+  color: var(--danger);
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: 14.5px;
+}
+
+.status-hero {
+  text-align: center;
+  padding: 36px 0 10px;
+}
+
+.spinner {
+  width: 44px;
+  height: 44px;
+  margin: 0 auto 16px;
+  border-radius: 50%;
+  border: 4px solid var(--line);
+  border-top-color: var(--accent);
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.timeline {
+  margin: 26px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0;
+}
+
+.timeline li {
+  position: relative;
+  padding: 0 0 22px 30px;
+  font-size: 15px;
+}
+
+.timeline li::before {
+  content: "";
+  position: absolute;
+  left: 8px;
+  top: 22px;
+  bottom: -2px;
+  width: 2px;
+  background: var(--line);
+}
+
+.timeline li:last-child::before {
+  display: none;
+}
+
+.timeline li::after {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 5px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 2.5px solid var(--accent);
+}
+
+.timeline time {
+  display: block;
+  font-size: 12.5px;
+  color: var(--ink-faint);
+}
+
+.disclaimer {
+  margin-top: 40px;
+  font-size: 13px;
+  color: var(--ink-faint);
+  border-top: 1px solid var(--line);
+  padding-top: 16px;
+}
+
+.prose h2 {
+  font-size: 22px;
+  letter-spacing: -0.01em;
+}
+
+.prose p,
+.prose li {
+  color: var(--ink-soft);
+  font-size: 16px;
+}
