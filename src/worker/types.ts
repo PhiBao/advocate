@@ -68,6 +68,14 @@ export interface DocumentMeta {
   created_at: number;
 }
 
+export interface CaseFinding {
+  code: string;
+  severity: "high" | "medium" | "info";
+  title: string;
+  detail: string;
+  spans: string[];
+}
+
 export interface CasePublic {
   id: string;
   dispute_type: DisputeType;
@@ -77,6 +85,7 @@ export interface CasePublic {
   payer_name: string | null;
   documents: DocumentMeta[];
   timeline: TimelineEvent[];
+  findings: CaseFinding[];
 }
 
 /** API error envelope. Internal details must never leak to clients. */

@@ -8,7 +8,10 @@
     "node": ">=22"
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["esbuild", "workerd"]
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "workerd"
+    ]
   },
   "scripts": {
     "dev": "wrangler dev",
@@ -26,6 +29,7 @@
     "wrangler": "^4.95.0"
   },
   "dependencies": {
-    "hono": "^4.9.7"
+    "hono": "^4.9.7",
+    "unpdf": "^1.8.1"
   }
 }

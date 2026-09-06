@@ -272,11 +272,74 @@ a {
   padding-top: 16px;
 }
 
+.findings {
+  margin: 22px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 12px;
+}
+
+.finding {
+  border: 1px solid var(--line);
+  border-left-width: 5px;
+  border-radius: 12px;
+  padding: 14px 16px;
+  background: var(--surface);
+}
+
+.finding.high {
+  border-left-color: var(--danger);
+}
+
+.finding.medium {
+  border-left-color: var(--warn);
+}
+
+.finding.info {
+  border-left-color: var(--accent);
+}
+
+.finding .tag {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 4px;
+}
+
+.finding.high .tag {
+  color: var(--danger);
+}
+
+.finding.medium .tag {
+  color: var(--warn);
+}
+
+.finding.info .tag {
+  color: var(--accent-deep);
+}
+
+.finding p {
+  margin: 4px 0 0;
+  font-size: 15px;
+  color: var(--ink-soft);
+}
+
+.slow-note {
+  margin-top: 14px;
+  font-size: 14px;
+  color: var(--ink-soft);
+  background: var(--warn-soft);
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+
 .prose h2 {
   font-size: 22px;
   letter-spacing: -0.01em;
 }
-
 .prose p,
 .prose li {
   color: var(--ink-soft);

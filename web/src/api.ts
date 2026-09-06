@@ -20,6 +20,14 @@ export interface TimelineEvent {
   created_at: number;
 }
 
+export interface CaseFinding {
+  code: string;
+  severity: "high" | "medium" | "info";
+  title: string;
+  detail: string;
+  spans: string[];
+}
+
 export interface CasePublic {
   id: string;
   dispute_type: string;
@@ -35,6 +43,7 @@ export interface CasePublic {
     created_at: number;
   }>;
   timeline: TimelineEvent[];
+  findings: CaseFinding[];
 }
 
 export interface CreateCaseResponse {

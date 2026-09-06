@@ -13,8 +13,8 @@ type State =
 
 const STATUS_COPY: Record<string, { title: string; sub: string }> = {
   uploaded: { title: "Bill received.", sub: "Your advocate is picking it up." },
-  reading: { title: "Reading your bill…", sub: "This takes about 30 seconds. Findings land here." },
-  needs_info: { title: "One quick thing.", sub: "Your advocate has a question before building the case." },
+  reading: { title: "Reading your bill…", sub: "This usually takes under a minute. Findings land here." },
+  needs_info: { title: "Your advocate has questions.", sub: "Review what's below — a few quick questions come next." },
   ready_for_review: { title: "Your case is ready to review.", sub: "Check the appeal letter before anything is sent." },
   approved: { title: "Approved.", sub: "Your advocate is filing and following up." },
   filed: { title: "Filed.", sub: "We're tracking the deadline and chasing a response." },
@@ -80,20 +80,51 @@ export default function CaseView({ caseId, token }: Props) {
   }
 
   const copy = STATUS_COPY[state.kase.status] ?? STATUS_COPY["reading"];
+  const kase = state.kase;
+  const readingLong =
+    (kase.status === "reading" || kase.status === "uploaded") &&
+    Date.now() - kase.created_at > 180_000;
+  const heroTitle = kase.findings.length > 0 ? "Here's what we found in your bill." : copy?.title;
+  const heroSub =
+    kase.findings.length > 0
+      ? "Review each item. Next, a few quick questions so we can build your appeal."
+      : copy?.sub;
   return (
     <>
       <div className="status-hero">
-        {(state.kase.status === "reading" || state.kase.status === "uploaded") && (
+        {(kase.status === "reading" || kase.status === "uploaded") && kase.findings.length === 0 && (
           <div className="spinner" aria-hidden="true" />
         )}
-        <h2>{copy?.title}</h2>
-        <p>{copy?.sub}</p>
+        <h2>{heroTitle}</h2>
+        <p>{heroSub}</p>
+        {readingLong && (
+          <div className="slow-note" role="status">
+            Still reading — this is taking longer than usual. Keep this tab open; if nothing
+            appears in a couple of minutes, your file may be unreadable and we'll tell you
+            plainly.
+          </div>
+        )}
       </div>
+
+      {kase.findings.length > 0 && (
+        <ul className="findings">
+          {kase.findings.map((f, i) => (
+            <li key={`${f.code}-${i}`} className={`finding ${f.severity}`}>
+              <span className="tag">
+                {f.severity === "high" ? "Worth disputing" : f.severity === "medium" ? "Check this" : "Good to know"}
+              </span>
+              <br />
+              <strong>{f.title}</strong>
+              <p>{f.detail}</p>
+            </li>
+          ))}
+        </ul>
+      )}
 
       <div className="card" style={{ marginTop: 18 }}>
         <strong>What your advocate has done</strong>
         <ul className="timeline">
-          {state.kase.timeline.map((e) => (
+          {kase.timeline.map((e) => (
             <li key={e.id}>
               <strong>{e.title}</strong>
               {e.body ? <div style={{ color: "var(--ink-soft)" }}>{e.body}</div> : null}

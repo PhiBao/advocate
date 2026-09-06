@@ -13,6 +13,7 @@
 
 import { Hono } from "hono";
 import { addDocument, addTimelineEvent, createCase, getCasePublic, setCaseStatus } from "./db";
+import { processCase } from "./pipeline";
 import { createClaimToken, verifyClaimToken } from "./tokens";
 import type { DisputeType, Env } from "./types";
 import { apiError } from "./types";
@@ -145,6 +146,11 @@ app.post("/api/cases", async (c) => {
   // Touch the per-case durable agent so D2+ can schedule reminders/deadlines.
   const stub = c.env.CASE_DO.get(c.env.CASE_DO.idFromName(caseId));
   await stub.fetch("https://do/reminders");
+
+  // Extraction + findings run in the background; the case page polls for them.
+  // waitUntil failures must never break the 201: processCase records its own
+  // timeline events, so a case always leaves "reading" one way or another.
+  c.executionCtx.waitUntil(processCase(c.env, caseId));
 
   const ttl = Number.parseInt(c.env.CLAIM_TOKEN_TTL_SECONDS, 10) || 7_776_000;
   const token = await createClaimToken(caseId, c.env.CLAIM_TOKEN_SECRET, ttl);

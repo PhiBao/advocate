@@ -4,6 +4,7 @@
 // except through the explicit pipeline stages (D2+).
 
 import type { CasePublic, CaseStatus, DisputeType, Env, TimelineKind } from "./types";
+import type { Finding } from "./rules";
 
 function now(): number {
   return Date.now();
@@ -58,8 +59,7 @@ export async function addTimelineEvent(
     .run();
 }
 
-export async function getCasePublic(env: Env, caseId: string): Promise<CasePublic | null> {
-  const row = await env.DB.prepare(
+export async function getCasePublic(env: Env, caseId: string): Promise<CasePublic | null> {  const row = await env.DB.prepare(
     `SELECT id, dispute_type, status, created_at, updated_at, payer_name
      FROM cases WHERE id = ?1`,
   )
@@ -109,5 +109,90 @@ export async function getCasePublic(env: Env, caseId: string): Promise<CasePubli
       body: e.body,
       created_at: e.created_at,
     })),
+    findings: await getFindings(env, caseId),
   };
+}
+
+export interface StoredDocument {
+  id: string;
+  object_key: string;
+  content_type: string;
+}
+
+export async function listDocuments(env: Env, caseId: string): Promise<StoredDocument[]> {
+  const res = await env.DB.prepare(
+    `SELECT id, object_key, content_type FROM documents WHERE case_id = ?1 ORDER BY created_at ASC`,
+  )
+    .bind(caseId)
+    .all<{ id: string; object_key: string; content_type: string }>();
+  return (res.results ?? []).map((d) => ({
+    id: d.id,
+    object_key: d.object_key,
+    content_type: d.content_type,
+  }));
+}
+
+export async function saveExtraction(
+  env: Env,
+  opts: { caseId: string; documentId: string; json: string },
+): Promise<void> {
+  await env.DB.prepare(
+    `INSERT INTO extractions (id, case_id, document_id, json, created_at)
+     VALUES (?1, ?2, ?3, ?4, ?5)`,
+  )
+    .bind(crypto.randomUUID(), opts.caseId, opts.documentId, opts.json, Date.now())
+    .run();
+}
+
+/** Replace all findings for a case (pipeline runs are idempotent). */
+export async function saveFindings(env: Env, caseId: string, findings: Finding[]): Promise<void> {
+  const batch: D1PreparedStatement[] = [
+    env.DB.prepare(`DELETE FROM findings WHERE case_id = ?1`).bind(caseId),
+  ];
+  for (const f of findings) {
+    batch.push(
+      env.DB.prepare(
+        `INSERT INTO findings (id, case_id, code, severity, title, detail, spans_json, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)`,
+      ).bind(
+        crypto.randomUUID(),
+        caseId,
+        f.code,
+        f.severity,
+        f.title,
+        f.detail,
+        JSON.stringify(f.spans),
+        Date.now(),
+      ),
+    );
+  }
+  await env.DB.batch(batch);
+}
+
+export async function getFindings(
+  env: Env,
+  caseId: string,
+): Promise<CasePublic["findings"]> {
+  const res = await env.DB.prepare(
+    `SELECT code, severity, title, detail, spans_json
+     FROM findings WHERE case_id = ?1 ORDER BY created_at ASC LIMIT 50`,
+  )
+    .bind(caseId)
+    .all<{ code: string; severity: string; title: string; detail: string; spans_json: string }>();
+  return (res.results ?? []).map((f) => {
+    let spans: string[] = [];
+    try {
+      const parsed: unknown = JSON.parse(f.spans_json);
+      if (Array.isArray(parsed)) spans = parsed.filter((s): s is string => typeof s === "string");
+    } catch {
+      spans = [];
+    }
+    return {
+      code: f.code,
+      severity: f.severity === "high" || f.severity === "medium" ? f.severity : "info",
+      title: f.title,
+      detail: f.detail,
+      spans,
+    };
+  });
 }
