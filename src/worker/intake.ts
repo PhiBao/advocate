@@ -44,6 +44,7 @@ Rules:
 - Ask about: whether flagged services were actually received (and how many times), emergency vs scheduled care, in-network facility, prior authorization, payments already made, and deadlines printed on the document.
 - Reference concrete values from the document (amounts, dates, codes) inside each prompt so the user knows exactly what you mean.
 - Never ask for SSN, full DOB, insurance ID numbers, or anything we don't need.
+- All money figures in the input are in dollars. Quote them exactly as given — never add zeros or move decimals.
 - Keys are stable snake_case ids.
 - Respond with a single JSON object and nothing else:
 {"questions":[{"key":string,"prompt":string,"kind":"yes_no|single_choice|short_text","options":string[]}]}`;
@@ -88,6 +89,7 @@ Rules:
 - deadlineText: appeal timing in general terms (most plans allow ~180 days; the exact deadline is on the EOB/letter). Never invent a specific date.
 - strategy: 2-4 sentences on what to dispute and why, grounded ONLY in the findings and answers.
 - evidence: 2-5 bullets, each referencing a concrete document span or line (e.g. "lines 3-4 show the same $1,840 charge twice"). No bullet without a span.
+- All money figures in the input are in dollars. Quote them exactly as given.
 - nextStep: the single most useful next action.
 - This is advocacy assistance, not legal advice. Do not cite statutes by number.
 - Respond with a single JSON object and nothing else:
@@ -114,14 +116,33 @@ export interface Grounding {
 }
 
 function groundingText(g: Grounding): string {
-  return JSON.stringify(
-    {
-      extractions: g.extractions,
-      findings: g.findings.map((f) => ({ code: f.code, title: f.title, detail: f.detail })),
-    },
-    null,
-    1,
-  ).slice(0, 12_000);
+  // Present money in dollars: generators have repeatedly misformatted raw
+  // cent integers (e.g. 301100 cents rendered as "$301,100").
+  const dollarsOf = (cents: number | null): number | null =>
+    cents === null ? null : Math.round(cents) / 100;
+  const view = {
+    extractions: g.extractions.map((e) => ({
+      documentKind: e.documentKind,
+      providerName: e.providerName,
+      payerName: e.payerName,
+      statementDate: e.statementDate,
+      totalBilled: dollarsOf(e.totalBilledCents),
+      insurerPaid: dollarsOf(e.insurerPaidCents),
+      patientResponsibility: dollarsOf(e.patientResponsibilityCents),
+      notCovered: dollarsOf(e.notCoveredCents),
+      deductibleApplied: dollarsOf(e.deductibleAppliedCents),
+      denialReason: e.denialReason,
+      lineItems: e.lineItems.map((i) => ({
+        lineRef: i.lineRef,
+        description: i.description,
+        code: i.code,
+        amount: dollarsOf(i.amountCents),
+      })),
+      confidence: e.confidence,
+    })),
+    findings: g.findings.map((f) => ({ code: f.code, title: f.title, detail: f.detail })),
+  };
+  return JSON.stringify(view, null, 1).slice(0, 12_000);
 }
 
 export async function generateQuestions(client: LlmClient, g: Grounding): Promise<IntakeQuestion[]> {
