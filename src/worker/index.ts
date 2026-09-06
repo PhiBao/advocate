@@ -303,6 +303,12 @@ async function buildLetter(
       // Keep the first draft's problems; stored as needs_review below.
     }
   }
+  // If a letter appeared while we were drafting (explicit POST raced the
+  // background auto-draft), keep the newer one and drop ours.
+  const raced = await getLatestLetter(env, caseId);
+  if (raced) {
+    return { version: raced.version, status: raced.status, issues: raced.issues };
+  }
   const saved = await saveLetterVersion(env, caseId, final, problems.length === 0 ? "draft" : "needs_review", problems);
   await addTimelineEvent(env, {
     caseId,

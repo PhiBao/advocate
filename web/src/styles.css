@@ -382,16 +382,24 @@ a {
 @media print {
   .site-header,
   .status-hero,
-  .no-print {
+  .no-print,
+  .disclaimer,
+  .findings,
+  .timeline {
     display: none !important;
   }
   .wrap {
     max-width: none;
     padding: 0;
   }
-  .card {
+  /* Print = the letter + filing steps only. */
+  .card:not(.letter-sheet) {
+    display: none !important;
+  }
+  .letter-sheet {
     box-shadow: none;
-    break-inside: avoid;
+    border: none;
+    font-family: Georgia, "Times New Roman", serif;
   }
   body {
     background: #fff;

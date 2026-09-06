@@ -74,10 +74,10 @@ export default function CaseView({ caseId, token }: Props) {
       }
     }
     void load();
-    // Light polling while the case is young so "reading" flips without refresh.
+    // Poll fast while the agent is working; back off once things settle.
     const t = window.setInterval(() => {
       void refresh();
-    }, 8000);
+    }, 10_000);
     return () => {
       cancelled = true;
       window.clearInterval(t);
@@ -220,7 +220,7 @@ export default function CaseView({ caseId, token }: Props) {
         </ul>
       )}
 
-      <div className="card" style={{ marginTop: 18 }}>
+      <div className="card no-print" style={{ marginTop: 18 }}>
         <strong>What your advocate has done</strong>
         <ul className="timeline">
           {kase.timeline.map((e) => (
@@ -232,6 +232,12 @@ export default function CaseView({ caseId, token }: Props) {
           ))}
         </ul>
       </div>
+
+      {won && (
+        <a className="btn no-print" href="#/" style={{ marginTop: 18, textDecoration: "none" }}>
+          Start a new case
+        </a>
+      )}
 
       <p className="disclaimer">
         Keep this link — it&rsquo;s your private key to this case, no account needed. Nothing is
