@@ -92,6 +92,18 @@ export class CaseAgent extends DurableObject<Env> {
       });
       return Response.json({ ok: true });
     }
+    if (url.pathname === "/reminders/cancel" && request.method === "POST") {
+      let body: unknown = null;
+      try {
+        body = await request.json();
+      } catch {
+        return Response.json({ error: "bad JSON" }, { status: 400 });
+      }
+      const id = (body as { id?: unknown }).id;
+      if (typeof id !== "string") return Response.json({ error: "id required" }, { status: 400 });
+      await this.cancelReminder(id);
+      return Response.json({ ok: true });
+    }
     return new Response("Not found", { status: 404 });
   }
 }

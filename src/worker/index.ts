@@ -26,6 +26,7 @@ import {
   getSummary,
   saveAnswers,
   saveLetterVersion,
+  saveOutcome,
   saveSummary,
   setCaseStatus,
   setLetterStatus,
@@ -558,6 +559,86 @@ app.post("/api/cases/:id/filed", async (c) => {
     // Reminder scheduling is best-effort; the filed state stands regardless.
   }
   return c.json({ ok: true });
+});
+
+const OUTCOME_RESULTS = ["won_full", "reduced", "denied", "no_response"] as const;
+
+/** Record what happened. Closes the loop: resolved / closed / still tracking. */
+app.post("/api/cases/:id/outcome", async (c) => {
+  const caseId = c.req.param("id");
+  const body = await readJsonBody(c);
+  if (!body) return apiError("BAD_REQUEST", "Send a JSON body with your case token.");
+  const token = tokenFromBody(body);
+  if (!token || !(await verifyClaimToken(token, caseId, c.env.CLAIM_TOKEN_SECRET))) {
+    return apiError("FORBIDDEN", "This case link is missing, invalid, or expired.", 403);
+  }
+  if (typeof body !== "object" || body === null) return apiError("BAD_REQUEST", "Invalid body.");
+  const { result, amountRecovered, note } = body as {
+    result?: unknown;
+    amountRecovered?: unknown;
+    note?: unknown;
+  };
+  if (typeof result !== "string" || !(OUTCOME_RESULTS as readonly string[]).includes(result)) {
+    return apiError("BAD_OUTCOME", "Tell us what happened: won, reduced, denied, or waiting.");
+  }
+  const kase = await getCasePublic(c.env, caseId);
+  if (!kase) return apiError("NOT_FOUND", "We couldn't find that case.", 404);
+  if (!["filed", "in_followup", "resolved", "closed"].includes(kase.status)) {
+    return apiError("TOO_EARLY", "File your appeal first — then record what happened.", 409);
+  }
+  let cents = 0;
+  if (result === "won_full" || result === "reduced") {
+    if (typeof amountRecovered !== "number" || !Number.isFinite(amountRecovered) || amountRecovered <= 0) {
+      return apiError("BAD_AMOUNT", "Tell us how much you saved, in dollars.");
+    }
+    if (amountRecovered > 10_000_000) return apiError("BAD_AMOUNT", "That amount looks off. Check the number.");
+    cents = Math.round(amountRecovered * 100);
+  }
+  const cleanNote = typeof note === "string" ? note.slice(0, 500) : "";
+
+  await saveOutcome(c.env, {
+    caseId,
+    result: result as (typeof OUTCOME_RESULTS)[number],
+    amountRecoveredCents: cents,
+    note: cleanNote,
+  });
+
+  const nextStatus =
+    result === "denied" ? "closed" : result === "no_response" ? "in_followup" : "resolved";
+  await setCaseStatus(c.env, caseId, nextStatus);
+  const titles = {
+    won_full: "You won — full amount dropped",
+    reduced: "Bill reduced",
+    denied: "They said no — escalation options below",
+    no_response: "Still no response — keep tracking",
+  } as const;
+  await addTimelineEvent(c.env, {
+    caseId,
+    kind: "outcome_recorded",
+    title: titles[result as keyof typeof titles],
+    ...(result === "won_full" || result === "reduced"
+      ? { body: `Saved $${(cents / 100).toLocaleString("en-US", { minimumFractionDigits: 2 })}.${cleanNote ? ` ${cleanNote}` : ""}` }
+      : cleanNote
+        ? { body: cleanNote }
+        : {}),
+  });
+
+  // Outcome recorded: the 3-week check-in has done its job.
+  try {
+    const latest = await getLatestLetter(c.env, caseId);
+    if (latest) {
+      const stub = c.env.CASE_DO.get(c.env.CASE_DO.idFromName(caseId));
+      await stub.fetch("https://do/reminders/cancel", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id: `followup-${latest.id}` }),
+      });
+    }
+  } catch {
+    // Best-effort; a stray reminder is harmless.
+  }
+  const updated = await getCasePublic(c.env, caseId);
+  return c.json({ outcome: updated?.outcome ?? null, status: updated?.status ?? nextStatus });
 });
 
 app.onError((err, c) => {  // Never leak stack traces or binding details to clients.

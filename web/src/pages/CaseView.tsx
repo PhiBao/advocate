@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { ApiRequestError, dollars, fetchQuestions, getCase, type CasePublic } from "../api";
 import Intake from "../components/Intake";
+import Outcome from "../components/Outcome";
 import Review from "../components/Review";
 
 interface Props {
@@ -113,12 +114,24 @@ export default function CaseView({ caseId, token }: Props) {
   const showReview =
     kase.summary !== null &&
     (kase.status === "ready_for_review" || kase.status === "approved" || kase.status === "filed");
+  const showOutcome =
+    kase.status === "filed" ||
+    kase.status === "in_followup" ||
+    kase.status === "resolved" ||
+    kase.status === "closed";
   const readingLong =
     (kase.status === "reading" || kase.status === "uploaded") &&
     Date.now() - kase.created_at > 180_000;
-  const heroTitle = kase.findings.length > 0 ? "Here's what we found in your bill." : copy?.title;
-  const heroSub =
-    kase.findings.length > 0
+  const won = kase.outcome !== null && (kase.outcome.result === "won_full" || kase.outcome.result === "reduced");
+  const heroTitle = won
+    ? `You saved ${dollars(kase.outcome?.amountRecoveredCents ?? 0)}.`
+    : kase.findings.length > 0 && (kase.status === "reading" || kase.status === "needs_info" || kase.status === "ready_for_review")
+      ? "Here's what we found in your bill."
+      : copy?.title;
+  const heroSub = won
+    ? "That's real money back. Start a new case any time a bill looks wrong."
+    : kase.findings.length > 0 &&
+        (kase.status === "reading" || kase.status === "needs_info" || kase.status === "ready_for_review")
       ? "Review each item. Next, a few quick questions so we can build your appeal."
       : copy?.sub;
   return (
@@ -182,6 +195,15 @@ export default function CaseView({ caseId, token }: Props) {
       )}
       {showReview && (
         <Review kase={kase} caseId={caseId} token={token} onChange={() => void refresh()} />
+      )}
+      {showOutcome && (
+        <Outcome
+          caseId={caseId}
+          token={token}
+          disputedCents={kase.explainer?.patientResponsibilityCents ?? null}
+          existing={kase.outcome}
+          onChange={() => void refresh()}
+        />
       )}
       {kase.findings.length > 0 && (
         <ul className="findings">

@@ -118,6 +118,15 @@ export interface FilingGuideWire {
   note: string;
 }
 
+export type OutcomeResult = "won_full" | "reduced" | "denied" | "no_response";
+
+export interface OutcomeWire {
+  result: OutcomeResult;
+  amountRecoveredCents: number;
+  note: string;
+  createdAt: number;
+}
+
 export interface CasePublic {
   id: string;
   dispute_type: DisputeType;
@@ -133,6 +142,7 @@ export interface CasePublic {
   summary: CaseSummaryWire | null;
   letter: LetterWire | null;
   filingGuide: FilingGuideWire;
+  outcome: OutcomeWire | null;
 }
 
 /** API error envelope. Internal details must never leak to clients. */

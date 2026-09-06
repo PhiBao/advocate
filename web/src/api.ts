@@ -70,6 +70,15 @@ export interface FilingGuide {
   note: string;
 }
 
+export type OutcomeResult = "won_full" | "reduced" | "denied" | "no_response";
+
+export interface Outcome {
+  result: OutcomeResult;
+  amountRecoveredCents: number;
+  note: string;
+  createdAt: number;
+}
+
 export interface CasePublic {
   id: string;
   dispute_type: string;
@@ -91,6 +100,7 @@ export interface CasePublic {
   summary: CaseSummary | null;
   letter: Letter | null;
   filingGuide: FilingGuide;
+  outcome: Outcome | null;
 }
 
 export interface CreateCaseResponse {
@@ -193,4 +203,14 @@ export async function markFiled(
   note: string,
 ): Promise<{ ok: true }> {
   return postJson(caseId, "filed", { token, channel, note });
+}
+
+export async function recordOutcome(
+  caseId: string,
+  token: string,
+  result: OutcomeResult,
+  amountRecovered: number,
+  note: string,
+): Promise<{ outcome: Outcome | null; status: string }> {
+  return postJson(caseId, "outcome", { token, result, amountRecovered, note });
 }

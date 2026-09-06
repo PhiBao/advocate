@@ -3,7 +3,7 @@
 // Document bytes live in R2; nothing here is ever sent to model providers
 // except through the explicit pipeline stages (D2+).
 
-import type { CasePublic, CaseStatus, DisputeType, Env, TimelineKind } from "./types";
+import type { CasePublic, CaseStatus, DisputeType, Env, OutcomeResult, TimelineKind } from "./types";
 import type { CaseExtraction } from "./extract";
 import { buildExplainer, type CaseSummary, type IntakeQuestion } from "./intake";
 import { guideForPayer } from "./guides";
@@ -122,6 +122,7 @@ export async function getCasePublic(env: Env, caseId: string): Promise<CasePubli
     summary: await getSummary(env, caseId),
     letter: await getLetterWire(env, caseId),
     filingGuide: guideForPayer(row.payer_name ?? firstPayer(extractions)),
+    outcome: await getOutcome(env, caseId),
   };
 }
 
@@ -396,6 +397,42 @@ export async function saveLetterVersion(
 
 export async function setLetterStatus(env: Env, letterId: string, status: LetterStatus): Promise<void> {
   await env.DB.prepare(`UPDATE letters SET status = ?1 WHERE id = ?2`).bind(status, letterId).run();
+}
+
+export async function getOutcome(env: Env, caseId: string): Promise<CasePublic["outcome"]> {
+  const row = await env.DB.prepare(
+    `SELECT result, amount_recovered_cents, note, created_at FROM outcomes WHERE case_id = ?1`,
+  )
+    .bind(caseId)
+    .first<{ result: string; amount_recovered_cents: number; note: string; created_at: number }>();
+  if (!row) return null;
+  const result: OutcomeResult =
+    row.result === "won_full" || row.result === "reduced" || row.result === "denied" || row.result === "no_response"
+      ? row.result
+      : "no_response";
+  return {
+    result,
+    amountRecoveredCents: Number.isFinite(row.amount_recovered_cents) ? Math.max(0, row.amount_recovered_cents) : 0,
+    note: row.note,
+    createdAt: row.created_at,
+  };
+}
+
+export async function saveOutcome(
+  env: Env,
+  opts: { caseId: string; result: OutcomeResult; amountRecoveredCents: number; note: string },
+): Promise<void> {
+  await env.DB.prepare(
+    `INSERT INTO outcomes (case_id, result, amount_recovered_cents, note, created_at)
+     VALUES (?1, ?2, ?3, ?4, ?5)
+     ON CONFLICT(case_id) DO UPDATE SET
+       result = excluded.result,
+       amount_recovered_cents = excluded.amount_recovered_cents,
+       note = excluded.note,
+       created_at = excluded.created_at`,
+  )
+    .bind(opts.caseId, opts.result, opts.amountRecoveredCents, opts.note, Date.now())
+    .run();
 }
 
 export async function addDelivery(
