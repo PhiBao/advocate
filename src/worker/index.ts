@@ -42,6 +42,7 @@ import {
 import { clientFromEnv } from "./llm";
 import { processCase } from "./pipeline";
 import { createClaimToken, verifyClaimToken } from "./tokens";
+import { retentionSweep } from "./retention";
 import type { DisputeType, Env } from "./types";
 import { apiError } from "./types";
 
@@ -648,5 +649,20 @@ app.onError((err, c) => {  // Never leak stack traces or binding details to clie
 
 app.notFound((c) => apiError("NOT_FOUND", "Nothing here.", 404));
 
-export default app;
+export default {
+  fetch: app.fetch,
+  // Daily retention sweep: enforce the 90-day auto-delete promise (privacy note).
+  async scheduled(
+    _controller: ScheduledController,
+    env: Env,
+    ctx: ExecutionContext,
+  ): Promise<void> {
+    ctx.waitUntil(
+      retentionSweep(env).then((r) => {
+        if (r.deleted > 0) console.log("retention sweep deleted", r.deleted, "cases");
+      }),
+    );
+  },
+} satisfies ExportedHandler<Env>;
+
 export { CaseAgent } from "./CaseDO";

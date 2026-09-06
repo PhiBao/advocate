@@ -11,7 +11,7 @@
   "assets": {
     "directory": "./public",
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/api/*"]
+    "run_worker_first": ["/api/*", "/__scheduled"]
   },
   "d1_databases": [
     {
@@ -33,6 +33,9 @@
     "bindings": [{ "name": "CASE_DO", "class_name": "CaseAgent" }]
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["CaseAgent"] }],
+  "triggers": {
+    "crons": ["0 3 * * *"]
+  },
   "vars": {
     "APP_BASE_URL": "http://localhost:8787",
     "CLAIM_TOKEN_TTL_SECONDS": "7776000",

@@ -104,6 +104,12 @@ export class CaseAgent extends DurableObject<Env> {
       await this.cancelReminder(id);
       return Response.json({ ok: true });
     }
+    if (url.pathname === "/purge" && request.method === "POST") {
+      // Retention sweep: wipe this DO's storage (reminders etc.) for a deleted case.
+      await this.ctx.storage.deleteAll();
+      await this.ctx.storage.deleteAlarm();
+      return Response.json({ ok: true });
+    }
     return new Response("Not found", { status: 404 });
   }
 }
