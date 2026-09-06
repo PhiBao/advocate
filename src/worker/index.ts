@@ -28,6 +28,7 @@ import {
   saveLetterVersion,
   saveOutcome,
   saveSummary,
+  saveWtp,
   setCaseStatus,
   setLetterStatus,
 } from "./db";
@@ -646,6 +647,27 @@ app.post("/api/cases/:id/outcome", async (c) => {
   }
   const updated = await getCasePublic(c.env, caseId);
   return c.json({ outcome: updated?.outcome ?? null, status: updated?.status ?? nextStatus });
+});
+
+const WTP_VALUES = ["yes", "if_wins", "no"] as const;
+
+/** One-question WTP survey attached to a recorded outcome (validation metric). */
+app.post("/api/cases/:id/outcome/wtp", async (c) => {
+  const caseId = c.req.param("id");
+  const body = await readJsonBody(c);
+  if (!body) return apiError("BAD_REQUEST", "Send a JSON body with your case token.");
+  const token = tokenFromBody(body);
+  if (!token || !(await verifyClaimToken(token, caseId, c.env.CLAIM_TOKEN_SECRET))) {
+    return apiError("FORBIDDEN", "This case link is missing, invalid, or expired.", 403);
+  }
+  const wtp = typeof body === "object" && body !== null ? (body as { wtp?: unknown }).wtp : undefined;
+  if (typeof wtp !== "string" || !(WTP_VALUES as readonly string[]).includes(wtp)) {
+    return apiError("BAD_WTP", "Answer yes, only if it wins, or no.");
+  }
+  const kase = await getCasePublic(c.env, caseId);
+  if (!kase?.outcome) return apiError("NOT_FOUND", "Record the outcome first.", 404);
+  await saveWtp(c.env, caseId, wtp as (typeof WTP_VALUES)[number]);
+  return c.json({ ok: true });
 });
 
 app.onError((err, c) => {  // Never leak stack traces or binding details to clients.

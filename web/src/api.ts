@@ -76,6 +76,7 @@ export interface Outcome {
   result: OutcomeResult;
   amountRecoveredCents: number;
   note: string;
+  wtp: "yes" | "if_wins" | "no" | null;
   createdAt: number;
 }
 
@@ -213,4 +214,12 @@ export async function recordOutcome(
   note: string,
 ): Promise<{ outcome: Outcome | null; status: string }> {
   return postJson(caseId, "outcome", { token, result, amountRecovered, note });
+}
+
+export async function submitWtp(
+  caseId: string,
+  token: string,
+  wtp: "yes" | "if_wins" | "no",
+): Promise<{ ok: true }> {
+  return postJson(caseId, "outcome/wtp", { token, wtp });
 }

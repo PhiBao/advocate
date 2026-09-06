@@ -401,21 +401,27 @@ export async function setLetterStatus(env: Env, letterId: string, status: Letter
 
 export async function getOutcome(env: Env, caseId: string): Promise<CasePublic["outcome"]> {
   const row = await env.DB.prepare(
-    `SELECT result, amount_recovered_cents, note, created_at FROM outcomes WHERE case_id = ?1`,
+    `SELECT result, amount_recovered_cents, note, wtp, created_at FROM outcomes WHERE case_id = ?1`,
   )
     .bind(caseId)
-    .first<{ result: string; amount_recovered_cents: number; note: string; created_at: number }>();
+    .first<{ result: string; amount_recovered_cents: number; note: string; wtp: string | null; created_at: number }>();
   if (!row) return null;
   const result: OutcomeResult =
     row.result === "won_full" || row.result === "reduced" || row.result === "denied" || row.result === "no_response"
       ? row.result
       : "no_response";
+  const wtp = row.wtp === "yes" || row.wtp === "if_wins" || row.wtp === "no" ? row.wtp : null;
   return {
     result,
     amountRecoveredCents: Number.isFinite(row.amount_recovered_cents) ? Math.max(0, row.amount_recovered_cents) : 0,
     note: row.note,
+    wtp,
     createdAt: row.created_at,
   };
+}
+
+export async function saveWtp(env: Env, caseId: string, wtp: "yes" | "if_wins" | "no"): Promise<void> {
+  await env.DB.prepare(`UPDATE outcomes SET wtp = ?1 WHERE case_id = ?2`).bind(wtp, caseId).run();
 }
 
 export async function saveOutcome(

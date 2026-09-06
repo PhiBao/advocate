@@ -1,11 +1,17 @@
 import { useState } from "react";
-import { ApiRequestError, dollars, recordOutcome, type OutcomeResult } from "../api";
+import {
+  ApiRequestError,
+  dollars,
+  recordOutcome,
+  submitWtp,
+  type OutcomeResult,
+} from "../api";
 
 interface Props {
   caseId: string;
   token: string;
   disputedCents: number | null;
-  existing: { result: OutcomeResult; amountRecoveredCents: number; note: string } | null;
+  existing: { result: OutcomeResult; amountRecoveredCents: number; note: string; wtp: "yes" | "if_wins" | "no" | null } | null;
   onChange: () => void;
 }
 
@@ -22,6 +28,8 @@ export default function Outcome({ caseId, token, disputedCents, existing, onChan
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [shared, setShared] = useState(false);
+  const [wtpAnswer, setWtpAnswer] = useState<"yes" | "if_wins" | "no" | null>(null);
+  const [wtpSent, setWtpSent] = useState(false);
 
   async function submit(): Promise<void> {
     if (!result || busy) return;
@@ -73,6 +81,47 @@ export default function Outcome({ caseId, token, disputedCents, existing, onChan
             >
               {shared ? "Copied — spread the word" : "Share your win"}
             </button>
+            {existing.wtp === null && !wtpSent && (
+              <div className="no-print" style={{ marginTop: 18, borderTop: "1px solid var(--line)", paddingTop: 14 }}>
+                <strong style={{ fontSize: 15 }}>One honest question:</strong>
+                <p style={{ color: "var(--ink-soft)", fontSize: 14, marginTop: 2 }}>
+                  Would you pay $29 for this on your next bill?
+                </p>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  {(
+                    [
+                      { v: "yes", label: "Yes" },
+                      { v: "if_wins", label: "Only if it saves me money" },
+                      { v: "no", label: "No" },
+                    ] as const
+                  ).map((o) => (
+                    <button
+                      key={o.v}
+                      type="button"
+                      disabled={busy}
+                      onClick={() => {
+                        setWtpAnswer(o.v);
+                        setBusy(true);
+                        submitWtp(caseId, token, o.v)
+                          .then(() => setWtpSent(true))
+                          .catch(() => setError("Couldn't save that — no worries, skip it."))
+                          .finally(() => setBusy(false));
+                      }}
+                      style={{
+                        padding: "8px 14px",
+                        borderRadius: 999,
+                        border: wtpAnswer === o.v ? "2px solid var(--accent)" : "1.5px solid var(--line)",
+                        background: wtpAnswer === o.v ? "var(--accent-soft)" : "var(--surface)",
+                        cursor: "pointer",
+                        fontSize: 14,
+                      }}
+                    >
+                      {o.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </>
         ) : existing.result === "denied" ? (
           <>

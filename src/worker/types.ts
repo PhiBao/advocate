@@ -124,6 +124,8 @@ export interface OutcomeWire {
   result: OutcomeResult;
   amountRecoveredCents: number;
   note: string;
+  /** WTP survey answer: "yes" | "if_wins" | "no" | null (not asked yet). */
+  wtp: "yes" | "if_wins" | "no" | null;
   createdAt: number;
 }
 
