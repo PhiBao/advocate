@@ -4,8 +4,9 @@
 // Every outcome — success, scanned PDF, model failure — lands as an explicit
 // timeline event. A case never silently sits in "reading".
 
-import { addTimelineEvent, listDocuments, saveExtraction, saveFindings, setCaseStatus } from "./db";
+import { addTimelineEvent, ensureQuestions, listDocuments, saveExtraction, saveFindings, setCaseStatus } from "./db";
 import { extractDocument, ScannedPdfError, type CaseExtraction } from "./extract";
+import { generateQuestions } from "./intake";
 import { clientFromEnv, LlmError } from "./llm";
 import { detectRedFlags, mismatchRule, type Finding } from "./rules";
 import type { Env } from "./types";
@@ -79,6 +80,25 @@ export async function processCase(env: Env, caseId: string): Promise<void> {
     ),
   );
   await saveFindings(env, caseId, findings);
+
+  // Pre-generate intake questions so they're waiting when the user arrives.
+  // Best-effort: the frontend retries via POST …/questions on failure.
+  if (extractions.length > 0) {
+    try {
+      const qs = await generateQuestions(client, {
+        extractions: extractions.map((e) => e.ext),
+        findings,
+      });
+      await ensureQuestions(env, caseId, qs);
+    } catch {
+      await addTimelineEvent(env, {
+        caseId,
+        kind: "note",
+        title: "Questions are on their way",
+        body: "Your follow-up questions will appear here in a moment.",
+      });
+    }
+  }
 
   if (findings.length > 0) {
     await addTimelineEvent(env, {

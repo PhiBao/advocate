@@ -76,6 +76,32 @@ export interface CaseFinding {
   spans: string[];
 }
 
+export interface IntakeQuestionWire {
+  key: string;
+  prompt: string;
+  kind: "yes_no" | "single_choice" | "short_text";
+  options: string[];
+  answer: string | null;
+}
+
+export interface CaseSummaryWire {
+  disputeLabel: string;
+  deadlineText: string;
+  strategy: string;
+  evidence: string[];
+  nextStep: string;
+}
+
+export interface ExplainerWire {
+  providerName: string | null;
+  payerName: string | null;
+  documentKind: string;
+  totalBilledCents: number | null;
+  insurerPaidCents: number | null;
+  patientResponsibilityCents: number | null;
+  lines: Array<{ description: string; amountCents: number }>;
+}
+
 export interface CasePublic {
   id: string;
   dispute_type: DisputeType;
@@ -86,6 +112,9 @@ export interface CasePublic {
   documents: DocumentMeta[];
   timeline: TimelineEvent[];
   findings: CaseFinding[];
+  explainer: ExplainerWire | null;
+  questions: IntakeQuestionWire[];
+  summary: CaseSummaryWire | null;
 }
 
 /** API error envelope. Internal details must never leak to clients. */

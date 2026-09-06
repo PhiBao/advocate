@@ -4,6 +4,8 @@
 // except through the explicit pipeline stages (D2+).
 
 import type { CasePublic, CaseStatus, DisputeType, Env, TimelineKind } from "./types";
+import type { CaseExtraction } from "./extract";
+import { buildExplainer, type CaseSummary, type IntakeQuestion } from "./intake";
 import type { Finding } from "./rules";
 
 function now(): number {
@@ -110,6 +112,9 @@ export async function getCasePublic(env: Env, caseId: string): Promise<CasePubli
       created_at: e.created_at,
     })),
     findings: await getFindings(env, caseId),
+    explainer: buildExplainer(await getExtractions(env, caseId)),
+    questions: await getQuestions(env, caseId),
+    summary: await getSummary(env, caseId),
   };
 }
 
@@ -172,8 +177,7 @@ export async function saveFindings(env: Env, caseId: string, findings: Finding[]
 export async function getFindings(
   env: Env,
   caseId: string,
-): Promise<CasePublic["findings"]> {
-  const res = await env.DB.prepare(
+): Promise<CasePublic["findings"]> {  const res = await env.DB.prepare(
     `SELECT code, severity, title, detail, spans_json
      FROM findings WHERE case_id = ?1 ORDER BY created_at ASC LIMIT 50`,
   )
@@ -195,4 +199,116 @@ export async function getFindings(
       spans,
     };
   });
+}
+
+export async function getExtractions(env: Env, caseId: string): Promise<CaseExtraction[]> {
+  const res = await env.DB.prepare(`SELECT json FROM extractions WHERE case_id = ?1 ORDER BY created_at ASC`)
+    .bind(caseId)
+    .all<{ json: string }>();
+  const out: CaseExtraction[] = [];
+  for (const row of res.results ?? []) {
+    try {
+      out.push(JSON.parse(row.json) as CaseExtraction);
+    } catch {
+      // Corrupt extraction rows are skipped; findings remain the source of truth.
+    }
+  }
+  return out;
+}
+
+function parseOptions(json: string): string[] {
+  try {
+    const v: unknown = JSON.parse(json);
+    return Array.isArray(v) ? v.filter((s): s is string => typeof s === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Insert questions if none exist (idempotent); return current set with answers. */
+export async function ensureQuestions(
+  env: Env,
+  caseId: string,
+  questions: IntakeQuestion[],
+): Promise<IntakeQuestion[]> {
+  const existing = await getQuestions(env, caseId);
+  if (existing.length > 0) return existing;
+  const batch = questions.map((q) =>
+    env.DB.prepare(
+      `INSERT OR IGNORE INTO intake_questions (id, case_id, qkey, prompt, kind, options_json, answer, created_at)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, NULL, ?7)`,
+    ).bind(crypto.randomUUID(), caseId, q.key, q.prompt, q.kind, JSON.stringify(q.options), Date.now()),
+  );
+  if (batch.length > 0) await env.DB.batch(batch);
+  return getQuestions(env, caseId);
+}
+
+export async function getQuestions(env: Env, caseId: string): Promise<IntakeQuestion[]> {
+  const res = await env.DB.prepare(
+    `SELECT qkey, prompt, kind, options_json, answer FROM intake_questions
+     WHERE case_id = ?1 ORDER BY created_at ASC LIMIT 12`,
+  )
+    .bind(caseId)
+    .all<{ qkey: string; prompt: string; kind: string; options_json: string; answer: string | null }>();
+  return (res.results ?? []).map((r) => ({
+    key: r.qkey,
+    prompt: r.prompt,
+    kind: r.kind === "single_choice" || r.kind === "short_text" ? r.kind : "yes_no",
+    options: parseOptions(r.options_json),
+    answer: r.answer,
+  }));
+}
+
+export async function saveAnswers(
+  env: Env,
+  caseId: string,
+  answers: Array<{ key: string; value: string }>,
+): Promise<void> {
+  const batch = answers.map((a) =>
+    env.DB.prepare(`UPDATE intake_questions SET answer = ?1 WHERE case_id = ?2 AND qkey = ?3`).bind(
+      a.value.slice(0, 500),
+      caseId,
+      a.key,
+    ),
+  );
+  if (batch.length > 0) await env.DB.batch(batch);
+}
+
+export async function saveSummary(env: Env, caseId: string, s: CaseSummary): Promise<void> {
+  await env.DB.prepare(
+    `INSERT INTO case_summaries (case_id, dispute_label, deadline_text, strategy, evidence_json, next_step, created_at)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+     ON CONFLICT(case_id) DO UPDATE SET
+       dispute_label = excluded.dispute_label,
+       deadline_text = excluded.deadline_text,
+       strategy = excluded.strategy,
+       evidence_json = excluded.evidence_json,
+       next_step = excluded.next_step,
+       created_at = excluded.created_at`,
+  )
+    .bind(caseId, s.disputeLabel, s.deadlineText, s.strategy, JSON.stringify(s.evidence), s.nextStep, Date.now())
+    .run();
+}
+
+export async function getSummary(env: Env, caseId: string): Promise<CaseSummary | null> {
+  const row = await env.DB.prepare(
+    `SELECT dispute_label, deadline_text, strategy, evidence_json, next_step
+     FROM case_summaries WHERE case_id = ?1`,
+  )
+    .bind(caseId)
+    .first<{
+      dispute_label: string;
+      deadline_text: string;
+      strategy: string;
+      evidence_json: string;
+      next_step: string;
+    }>();
+  if (!row) return null;
+  return {
+    disputeLabel: row.dispute_label,
+    deadlineText: row.deadline_text,
+    strategy: row.strategy,
+    evidence: parseOptions(row.evidence_json),
+    nextStep: row.next_step,
+  };
 }

@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
-import { ApiRequestError, getCase, type CasePublic } from "../api";
+import { useCallback, useEffect, useState } from "react";
+import { ApiRequestError, dollars, fetchQuestions, getCase, type CasePublic } from "../api";
+import Intake from "../components/Intake";
 
 interface Props {
   caseId: string;
@@ -26,11 +27,38 @@ const STATUS_COPY: Record<string, { title: string; sub: string }> = {
 export default function CaseView({ caseId, token }: Props) {
   const [state, setState] = useState<State>({ kind: "loading" });
 
+  const refresh = useCallback(async () => {
+    try {
+      const kase = await getCase(caseId, token);
+      setState({ kind: "ready", kase });
+    } catch {
+      // Polling failures are silent; the explicit load below reports errors.
+    }
+  }, [caseId, token]);
+
   useEffect(() => {
     let cancelled = false;
     async function load(): Promise<void> {
       try {
         const kase = await getCase(caseId, token);
+        if (cancelled) return;
+        // Questions may still be generating: one best-effort fetch (idempotent).
+        if (
+          (kase.status === "needs_info" || kase.status === "ready_for_review") &&
+          kase.findings.length > 0 &&
+          kase.questions.length === 0
+        ) {
+          try {
+            await fetchQuestions(caseId, token);
+            const withQ = await getCase(caseId, token);
+            if (!cancelled) {
+              setState({ kind: "ready", kase: withQ });
+              return;
+            }
+          } catch {
+            // Generation endpoint retries on next poll / user action.
+          }
+        }
         if (!cancelled) setState({ kind: "ready", kase });
       } catch (err) {
         if (cancelled) return;
@@ -46,17 +74,13 @@ export default function CaseView({ caseId, token }: Props) {
     void load();
     // Light polling while the case is young so "reading" flips without refresh.
     const t = window.setInterval(() => {
-      void getCase(caseId, token)
-        .then((kase) => {
-          if (!cancelled) setState({ kind: "ready", kase });
-        })
-        .catch(() => undefined);
+      void refresh();
     }, 8000);
     return () => {
       cancelled = true;
       window.clearInterval(t);
     };
-  }, [caseId, token]);
+  }, [caseId, token, refresh]);
 
   if (state.kind === "loading") {
     return (
@@ -81,6 +105,10 @@ export default function CaseView({ caseId, token }: Props) {
 
   const copy = STATUS_COPY[state.kase.status] ?? STATUS_COPY["reading"];
   const kase = state.kase;
+  const showIntake =
+    (kase.status === "needs_info" || kase.status === "ready_for_review") &&
+    kase.questions.length > 0 &&
+    !kase.summary;
   const readingLong =
     (kase.status === "reading" || kase.status === "uploaded") &&
     Date.now() - kase.created_at > 180_000;
@@ -106,6 +134,48 @@ export default function CaseView({ caseId, token }: Props) {
         )}
       </div>
 
+      {kase.explainer && (
+        <div className="card" style={{ marginTop: 18 }}>
+          <strong>What this {kase.explainer.documentKind === "unknown" ? "document" : kase.explainer.documentKind.toUpperCase()} says</strong>
+          <ul className="money-list">
+            {kase.explainer.totalBilledCents !== null && (
+              <li><span>Billed</span><strong>{dollars(kase.explainer.totalBilledCents)}</strong></li>
+            )}
+            {kase.explainer.insurerPaidCents !== null && (
+              <li><span>Insurance paid</span><strong>{dollars(kase.explainer.insurerPaidCents)}</strong></li>
+            )}
+            {kase.explainer.patientResponsibilityCents !== null && (
+              <li className="total"><span>They say you owe</span><strong>{dollars(kase.explainer.patientResponsibilityCents)}</strong></li>
+            )}
+          </ul>
+          {(kase.explainer.providerName || kase.explainer.payerName) && (
+            <div style={{ fontSize: 13.5, color: "var(--ink-soft)", marginTop: 8 }}>
+              {[kase.explainer.providerName, kase.explainer.payerName].filter(Boolean).join(" · ")}
+            </div>
+          )}
+        </div>
+      )}
+
+      {kase.summary && (
+        <div className="card" style={{ marginTop: 18 }}>
+          <div style={{ fontSize: 13, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--accent-deep)", fontWeight: 700 }}>
+            Your case brief
+          </div>
+          <h3 style={{ margin: "6px 0 8px", fontSize: 20 }}>{kase.summary.disputeLabel}</h3>
+          <p style={{ color: "var(--ink-soft)" }}>{kase.summary.strategy}</p>
+          <ul className="evidence">
+            {kase.summary.evidence.map((e, i) => (
+              <li key={i}>{e}</li>
+            ))}
+          </ul>
+          <p style={{ fontSize: 14.5 }}><strong>Next:</strong> {kase.summary.nextStep}</p>
+          <p style={{ fontSize: 13.5, color: "var(--ink-soft)" }}>{kase.summary.deadlineText}</p>
+        </div>
+      )}
+
+      {showIntake && (
+        <Intake caseId={caseId} token={token} initial={kase.questions} onDone={() => void refresh()} />
+      )}
       {kase.findings.length > 0 && (
         <ul className="findings">
           {kase.findings.map((f, i) => (

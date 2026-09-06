@@ -336,6 +336,37 @@ a {
   padding: 12px 14px;
 }
 
+.money-list {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.money-list li {
+  display: flex;
+  justify-content: space-between;
+  font-size: 16px;
+  padding: 10px 14px;
+  background: var(--bg);
+  border-radius: 10px;
+}
+
+.money-list li.total {
+  background: var(--accent-soft);
+  font-size: 18px;
+}
+
+.evidence {
+  margin: 10px 0;
+  padding-left: 20px;
+  color: var(--ink-soft);
+  font-size: 15px;
+  display: grid;
+  gap: 6px;
+}
+
 .prose h2 {
   font-size: 22px;
   letter-spacing: -0.01em;

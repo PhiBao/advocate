@@ -129,6 +129,7 @@ Rules:
 - List every charge line separately, even exact duplicates — duplicates matter.
 - Use null for anything not printed. Do not guess the document kind: use "unknown" if unsure.
 - Amounts are plain numbers in dollars (e.g. 1840.00, -2150.00 for payments/credits).
+- insurerPaid is the amount the insurer paid: ALWAYS zero or positive. A credit line like "Insurance paid: -$2,150" means the insurer covered $2,150 — record 2150.00, never negative.
 - lineRef is where the line appears, e.g. "line 4" or "page 2, line 3".
 - denialReason is ONLY the insurer's stated explanation for not paying (e.g. "no prior authorization on file"). A bare "DENIED" or "STATUS: DENIED" with no explanation is NOT a reason — use null.
 - Respond with a single JSON object and nothing else, matching this shape:

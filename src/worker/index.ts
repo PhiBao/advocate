@@ -12,7 +12,22 @@
 // - Errors return a fixed envelope; internal details are never leaked.
 
 import { Hono } from "hono";
-import { addDocument, addTimelineEvent, createCase, getCasePublic, setCaseStatus } from "./db";
+import {
+  addDocument,
+  addTimelineEvent,
+  createCase,
+  ensureQuestions,
+  getCasePublic,
+  getExtractions,
+  getFindings,
+  getQuestions,
+  getSummary,
+  saveAnswers,
+  saveSummary,
+  setCaseStatus,
+} from "./db";
+import { generateQuestions, generateSummary } from "./intake";
+import { clientFromEnv } from "./llm";
 import { processCase } from "./pipeline";
 import { createClaimToken, verifyClaimToken } from "./tokens";
 import type { DisputeType, Env } from "./types";
@@ -167,6 +182,123 @@ app.get("/api/cases/:id", async (c) => {
   const kase = await getCasePublic(c.env, caseId);
   if (!kase) return apiError("NOT_FOUND", "We couldn't find that case.", 404);
   return c.json(kase);
+});
+
+function tokenFromBody(body: unknown): string {
+  return typeof body === "object" && body !== null && "token" in body && typeof body.token === "string"
+    ? body.token
+    : "";
+}
+
+async function readJsonBody(c: { req: { json: () => Promise<unknown> } }): Promise<unknown | null> {
+  try {
+    return await c.req.json();
+  } catch {
+    return null;
+  }
+}
+
+/** Generate (or return existing) intake questions. Idempotent — safe to retry. */
+app.post("/api/cases/:id/questions", async (c) => {
+  const caseId = c.req.param("id");
+  const body = await readJsonBody(c);
+  if (!body) return apiError("BAD_REQUEST", "Send a JSON body with your case token.");
+  const token = tokenFromBody(body);
+  if (!token || !(await verifyClaimToken(token, caseId, c.env.CLAIM_TOKEN_SECRET))) {
+    return apiError("FORBIDDEN", "This case link is missing, invalid, or expired.", 403);
+  }
+  const kase = await getCasePublic(c.env, caseId);
+  if (!kase) return apiError("NOT_FOUND", "We couldn't find that case.", 404);
+
+  const existing = await getQuestions(c.env, caseId);
+  if (existing.length > 0) return c.json({ questions: existing });
+
+  const extractions = await getExtractions(c.env, caseId);
+  if (extractions.length === 0) {
+    return apiError("NOT_READY", "We're still reading your documents. Try again in a moment.", 409);
+  }
+  try {
+    const generated = await generateQuestions(clientFromEnv(c.env), {
+      extractions,
+      findings: await getFindings(c.env, caseId),
+    });
+    return c.json({ questions: await ensureQuestions(c.env, caseId, generated) });
+  } catch {
+    return apiError("TRY_AGAIN", "Question generation hiccuped. Please try again.", 503);
+  }
+});
+
+/** Submit answers. When all questions are answered, builds the case brief. */
+app.post("/api/cases/:id/answers", async (c) => {
+  const caseId = c.req.param("id");
+  const body = await readJsonBody(c);
+  if (!body) return apiError("BAD_REQUEST", "Send a JSON body with your answers.");
+  const token = tokenFromBody(body);
+  if (!token || !(await verifyClaimToken(token, caseId, c.env.CLAIM_TOKEN_SECRET))) {
+    return apiError("FORBIDDEN", "This case link is missing, invalid, or expired.", 403);
+  }
+
+  const rawAnswers =
+    typeof body === "object" && body !== null && "answers" in body && Array.isArray(body.answers)
+      ? body.answers
+      : [];
+  const stored = await getQuestions(c.env, caseId);
+  if (stored.length === 0) return apiError("NOT_READY", "Answer the questions first.", 409);
+  const byKey = new Map(stored.map((q) => [q.key, q]));
+
+  const clean: Array<{ key: string; value: string }> = [];
+  for (const a of rawAnswers) {
+    if (typeof a !== "object" || a === null) return apiError("BAD_ANSWER", "Each answer needs a key and a value.");
+    const { key, value } = a as { key?: unknown; value?: unknown };
+    if (typeof key !== "string" || typeof value !== "string") {
+      return apiError("BAD_ANSWER", "Each answer needs a key and a value.");
+    }
+    const q = byKey.get(key);
+    if (!q) return apiError("BAD_ANSWER", "Unknown question. Refresh and try again.");
+    const v = value.trim();
+    if (q.kind === "yes_no") {
+      if (!/^(yes|no)$/i.test(v)) return apiError("BAD_ANSWER", "Please answer yes or no.");
+      clean.push({ key, value: v.toLowerCase() === "yes" ? "Yes" : "No" });
+    } else if (q.kind === "single_choice") {
+      if (!q.options.includes(v)) return apiError("BAD_ANSWER", "Please pick one of the offered options.");
+      clean.push({ key, value: v });
+    } else {
+      if (v.length === 0 || v.length > 500) {
+        return apiError("BAD_ANSWER", "Please write a short answer (under 500 characters).");
+      }
+      clean.push({ key, value: v });
+    }
+  }
+  if (clean.length > 0) await saveAnswers(c.env, caseId, clean);
+
+  const updated = await getQuestions(c.env, caseId);
+  const unanswered = updated.filter((q) => !q.answer);
+  if (unanswered.length > 0) return c.json({ questions: updated, summary: null });
+
+  // All answered (or re-POST with zero new answers): build/refresh the brief.
+  const existing = await getSummary(c.env, caseId);
+  if (existing && clean.length === 0) return c.json({ questions: updated, summary: existing });
+  try {
+    const summary = await generateSummary(
+      clientFromEnv(c.env),
+      {
+        extractions: await getExtractions(c.env, caseId),
+        findings: await getFindings(c.env, caseId),
+      },
+      updated.map((q) => ({ prompt: q.prompt, answer: q.answer ?? "" })),
+    );
+    await saveSummary(c.env, caseId, summary);
+    await setCaseStatus(c.env, caseId, "ready_for_review");
+    await addTimelineEvent(c.env, {
+      caseId,
+      kind: "note",
+      title: "Your case brief is ready",
+      body: summary.nextStep,
+    });
+    return c.json({ questions: updated, summary });
+  } catch {
+    return apiError("TRY_AGAIN", "The brief hiccuped. Tap build again in a moment.", 503);
+  }
 });
 
 app.onError((err, c) => {

@@ -28,6 +28,32 @@ export interface CaseFinding {
   spans: string[];
 }
 
+export interface IntakeQuestion {
+  key: string;
+  prompt: string;
+  kind: "yes_no" | "single_choice" | "short_text";
+  options: string[];
+  answer: string | null;
+}
+
+export interface CaseSummary {
+  disputeLabel: string;
+  deadlineText: string;
+  strategy: string;
+  evidence: string[];
+  nextStep: string;
+}
+
+export interface Explainer {
+  providerName: string | null;
+  payerName: string | null;
+  documentKind: string;
+  totalBilledCents: number | null;
+  insurerPaidCents: number | null;
+  patientResponsibilityCents: number | null;
+  lines: Array<{ description: string; amountCents: number }>;
+}
+
 export interface CasePublic {
   id: string;
   dispute_type: string;
@@ -44,6 +70,9 @@ export interface CasePublic {
   }>;
   timeline: TimelineEvent[];
   findings: CaseFinding[];
+  explainer: Explainer | null;
+  questions: IntakeQuestion[];
+  summary: CaseSummary | null;
 }
 
 export interface CreateCaseResponse {
@@ -88,4 +117,35 @@ export async function getCase(caseId: string, token: string): Promise<CasePublic
   const res = await fetch(`/api/cases/${encodeURIComponent(caseId)}?token=${encodeURIComponent(token)}`);
   if (!res.ok) throw await readError(res);
   return (await res.json()) as CasePublic;
+}
+
+export function dollars(cents: number): string {
+  const sign = cents < 0 ? "-" : "";
+  const abs = Math.abs(cents);
+  return `${sign}$${Math.floor(abs / 100).toLocaleString("en-US")}.${String(abs % 100).padStart(2, "0")}`;
+}
+
+async function postJson<T>(caseId: string, path: "questions" | "answers", payload: unknown): Promise<T> {
+  const res = await fetch(`/api/cases/${encodeURIComponent(caseId)}/${path}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw await readError(res);
+  return (await res.json()) as T;
+}
+
+export async function fetchQuestions(
+  caseId: string,
+  token: string,
+): Promise<{ questions: IntakeQuestion[] }> {
+  return postJson(caseId, "questions", { token });
+}
+
+export async function submitAnswers(
+  caseId: string,
+  token: string,
+  answers: Array<{ key: string; value: string }>,
+): Promise<{ questions: IntakeQuestion[]; summary: CaseSummary | null }> {
+  return postJson(caseId, "answers", { token, answers });
 }
