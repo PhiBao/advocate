@@ -102,6 +102,22 @@ export interface ExplainerWire {
   lines: Array<{ description: string; amountCents: number }>;
 }
 
+export interface LetterWire {
+  version: number;
+  subject: string;
+  bodyMd: string;
+  citations: Array<{ span: string; quote: string }>;
+  status: "draft" | "approved" | "needs_review";
+  issues: string[];
+}
+
+export interface FilingGuideWire {
+  payer: string;
+  portalUrl: string | null;
+  steps: string[];
+  note: string;
+}
+
 export interface CasePublic {
   id: string;
   dispute_type: DisputeType;
@@ -115,6 +131,8 @@ export interface CasePublic {
   explainer: ExplainerWire | null;
   questions: IntakeQuestionWire[];
   summary: CaseSummaryWire | null;
+  letter: LetterWire | null;
+  filingGuide: FilingGuideWire;
 }
 
 /** API error envelope. Internal details must never leak to clients. */

@@ -367,6 +367,25 @@ a {
   gap: 6px;
 }
 
+@media print {
+  .site-header,
+  .status-hero,
+  .no-print {
+    display: none !important;
+  }
+  .wrap {
+    max-width: none;
+    padding: 0;
+  }
+  .card {
+    box-shadow: none;
+    break-inside: avoid;
+  }
+  body {
+    background: #fff;
+  }
+}
+
 .prose h2 {
   font-size: 22px;
   letter-spacing: -0.01em;

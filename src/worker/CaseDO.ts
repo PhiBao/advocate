@@ -71,6 +71,27 @@ export class CaseAgent extends DurableObject<Env> {
       const pending = (await this.ctx.storage.get<Reminder[]>("reminders")) ?? [];
       return Response.json({ reminders: pending });
     }
+    if (url.pathname === "/reminders" && request.method === "POST") {
+      let body: unknown = null;
+      try {
+        body = await request.json();
+      } catch {
+        return Response.json({ error: "bad JSON" }, { status: 400 });
+      }
+      const r = (body as { reminder?: Partial<Reminder> }).reminder;
+      if (!r || typeof r.id !== "string" || typeof r.caseId !== "string" || typeof r.fireAt !== "number") {
+        return Response.json({ error: "reminder needs id, caseId, fireAt" }, { status: 400 });
+      }
+      await this.scheduleReminder({
+        id: r.id,
+        caseId: r.caseId,
+        kind: r.kind ?? "deadline_reminder",
+        title: typeof r.title === "string" ? r.title : "Reminder",
+        body: typeof r.body === "string" ? r.body : "",
+        fireAt: r.fireAt,
+      });
+      return Response.json({ ok: true });
+    }
     return new Response("Not found", { status: 404 });
   }
 }

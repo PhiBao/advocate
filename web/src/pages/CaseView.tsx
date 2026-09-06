@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { ApiRequestError, dollars, fetchQuestions, getCase, type CasePublic } from "../api";
 import Intake from "../components/Intake";
+import Review from "../components/Review";
 
 interface Props {
   caseId: string;
@@ -109,6 +110,9 @@ export default function CaseView({ caseId, token }: Props) {
     (kase.status === "needs_info" || kase.status === "ready_for_review") &&
     kase.questions.length > 0 &&
     !kase.summary;
+  const showReview =
+    kase.summary !== null &&
+    (kase.status === "ready_for_review" || kase.status === "approved" || kase.status === "filed");
   const readingLong =
     (kase.status === "reading" || kase.status === "uploaded") &&
     Date.now() - kase.created_at > 180_000;
@@ -175,6 +179,9 @@ export default function CaseView({ caseId, token }: Props) {
 
       {showIntake && (
         <Intake caseId={caseId} token={token} initial={kase.questions} onDone={() => void refresh()} />
+      )}
+      {showReview && (
+        <Review kase={kase} caseId={caseId} token={token} onChange={() => void refresh()} />
       )}
       {kase.findings.length > 0 && (
         <ul className="findings">

@@ -6,6 +6,8 @@
 import type { CasePublic, CaseStatus, DisputeType, Env, TimelineKind } from "./types";
 import type { CaseExtraction } from "./extract";
 import { buildExplainer, type CaseSummary, type IntakeQuestion } from "./intake";
+import { guideForPayer } from "./guides";
+import type { LetterStatus } from "./letter";
 import type { Finding } from "./rules";
 
 function now(): number {
@@ -61,7 +63,8 @@ export async function addTimelineEvent(
     .run();
 }
 
-export async function getCasePublic(env: Env, caseId: string): Promise<CasePublic | null> {  const row = await env.DB.prepare(
+export async function getCasePublic(env: Env, caseId: string): Promise<CasePublic | null> {
+  const row = await env.DB.prepare(
     `SELECT id, dispute_type, status, created_at, updated_at, payer_name
      FROM cases WHERE id = ?1`,
   )
@@ -75,6 +78,8 @@ export async function getCasePublic(env: Env, caseId: string): Promise<CasePubli
       payer_name: string | null;
     }>();
   if (!row) return null;
+
+  const extractions = await getExtractions(env, caseId);
 
   const docs = await env.DB.prepare(
     `SELECT id, content_type, byte_size, page_count, created_at
@@ -112,9 +117,34 @@ export async function getCasePublic(env: Env, caseId: string): Promise<CasePubli
       created_at: e.created_at,
     })),
     findings: await getFindings(env, caseId),
-    explainer: buildExplainer(await getExtractions(env, caseId)),
+    explainer: buildExplainer(extractions),
     questions: await getQuestions(env, caseId),
     summary: await getSummary(env, caseId),
+    letter: await getLetterWire(env, caseId),
+    filingGuide: guideForPayer(row.payer_name ?? firstPayer(extractions)),
+  };
+}
+
+function firstPayer(extractions: CaseExtraction[]): string | null {
+  for (const e of extractions) {
+    if (e.payerName) return e.payerName;
+  }
+  return null;
+}
+
+async function getLetterWire(
+  env: Env,
+  caseId: string,
+): Promise<CasePublic["letter"]> {
+  const latest = await getLatestLetter(env, caseId);
+  if (!latest) return null;
+  return {
+    version: latest.version,
+    subject: latest.subject,
+    bodyMd: latest.bodyMd,
+    citations: latest.citations,
+    status: latest.status,
+    issues: latest.issues,
   };
 }
 
@@ -287,6 +317,96 @@ export async function saveSummary(env: Env, caseId: string, s: CaseSummary): Pro
        created_at = excluded.created_at`,
   )
     .bind(caseId, s.disputeLabel, s.deadlineText, s.strategy, JSON.stringify(s.evidence), s.nextStep, Date.now())
+    .run();
+}
+
+export interface StoredLetter {
+  id: string;
+  version: number;
+  subject: string;
+  bodyMd: string;
+  citations: Array<{ span: string; quote: string }>;
+  status: LetterStatus;
+  issues: string[];
+}
+
+function parseCitations(json: string): StoredLetter["citations"] {
+  try {
+    const v: unknown = JSON.parse(json);
+    if (!Array.isArray(v)) return [];
+    return v
+      .filter(
+        (c): c is { span: string; quote: string } =>
+          typeof c === "object" &&
+          c !== null &&
+          typeof (c as { span?: unknown }).span === "string" &&
+          typeof (c as { quote?: unknown }).quote === "string",
+      )
+      .map((c) => ({ span: c.span, quote: c.quote }));
+  } catch {
+    return [];
+  }
+}
+
+export async function getLatestLetter(env: Env, caseId: string): Promise<StoredLetter | null> {
+  const row = await env.DB.prepare(
+    `SELECT id, version, subject, body_md, citations_json, status, issues_json
+     FROM letters WHERE case_id = ?1 ORDER BY version DESC LIMIT 1`,
+  )
+    .bind(caseId)
+    .first<{
+      id: string;
+      version: number;
+      subject: string;
+      body_md: string;
+      citations_json: string;
+      status: string;
+      issues_json: string | null;
+    }>();
+  if (!row) return null;
+  return {
+    id: row.id,
+    version: row.version,
+    subject: row.subject,
+    bodyMd: row.body_md,
+    citations: parseCitations(row.citations_json),
+    status: row.status === "approved" || row.status === "needs_review" ? row.status : "draft",
+    issues: parseOptions(row.issues_json ?? "[]"),
+  };
+}
+
+export async function saveLetterVersion(
+  env: Env,
+  caseId: string,
+  draft: { subject: string; bodyMd: string; citations: Array<{ span: string; quote: string }> },
+  status: LetterStatus,
+  issues: string[] = [],
+): Promise<StoredLetter> {
+  const latest = await getLatestLetter(env, caseId);
+  const version = (latest?.version ?? 0) + 1;
+  const id = crypto.randomUUID();
+  await env.DB.prepare(
+    `INSERT INTO letters (id, case_id, version, subject, body_md, citations_json, status, issues_json, created_at)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)`,
+  )
+    .bind(id, caseId, version, draft.subject, draft.bodyMd, JSON.stringify(draft.citations), status, JSON.stringify(issues), Date.now())
+    .run();
+  return { id, version, subject: draft.subject, bodyMd: draft.bodyMd, citations: draft.citations, status, issues };
+}
+
+export async function setLetterStatus(env: Env, letterId: string, status: LetterStatus): Promise<void> {
+  await env.DB.prepare(`UPDATE letters SET status = ?1 WHERE id = ?2`).bind(status, letterId).run();
+}
+
+export async function addDelivery(
+  env: Env,
+  opts: { caseId: string; letterId: string; channel: string; detail: string },
+): Promise<void> {
+  await env.DB.prepare(
+    `INSERT INTO deliveries (id, case_id, letter_id, channel, detail, created_at)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6)`,
+  )
+    .bind(crypto.randomUUID(), opts.caseId, opts.letterId, opts.channel, opts.detail, Date.now())
     .run();
 }
 

@@ -54,6 +54,22 @@ export interface Explainer {
   lines: Array<{ description: string; amountCents: number }>;
 }
 
+export interface Letter {
+  version: number;
+  subject: string;
+  bodyMd: string;
+  citations: Array<{ span: string; quote: string }>;
+  status: "draft" | "approved" | "needs_review";
+  issues: string[];
+}
+
+export interface FilingGuide {
+  payer: string;
+  portalUrl: string | null;
+  steps: string[];
+  note: string;
+}
+
 export interface CasePublic {
   id: string;
   dispute_type: string;
@@ -73,6 +89,8 @@ export interface CasePublic {
   explainer: Explainer | null;
   questions: IntakeQuestion[];
   summary: CaseSummary | null;
+  letter: Letter | null;
+  filingGuide: FilingGuide;
 }
 
 export interface CreateCaseResponse {
@@ -125,7 +143,7 @@ export function dollars(cents: number): string {
   return `${sign}$${Math.floor(abs / 100).toLocaleString("en-US")}.${String(abs % 100).padStart(2, "0")}`;
 }
 
-async function postJson<T>(caseId: string, path: "questions" | "answers", payload: unknown): Promise<T> {
+async function postJson<T>(caseId: string, path: string, payload: unknown): Promise<T> {
   const res = await fetch(`/api/cases/${encodeURIComponent(caseId)}/${path}`, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -148,4 +166,31 @@ export async function submitAnswers(
   answers: Array<{ key: string; value: string }>,
 ): Promise<{ questions: IntakeQuestion[]; summary: CaseSummary | null }> {
   return postJson(caseId, "answers", { token, answers });
+}
+
+export async function ensureLetter(caseId: string, token: string): Promise<{ letter: Letter | null }> {
+  return postJson(caseId, "letter", { token });
+}
+
+export async function editLetter(
+  caseId: string,
+  token: string,
+  version: number,
+  subject: string,
+  bodyMd: string,
+): Promise<{ letter: Letter }> {
+  return postJson(caseId, "letter/edit", { token, version, subject, bodyMd });
+}
+
+export async function approveLetter(caseId: string, token: string, version: number): Promise<{ ok: true }> {
+  return postJson(caseId, "letter/approve", { token, version });
+}
+
+export async function markFiled(
+  caseId: string,
+  token: string,
+  channel: string,
+  note: string,
+): Promise<{ ok: true }> {
+  return postJson(caseId, "filed", { token, channel, note });
 }
