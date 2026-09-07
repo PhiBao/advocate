@@ -1,12 +1,28 @@
 # Advocate — we'll fight your medical bill
 
-Upload a medical bill or denial letter. Your advocate finds what's wrong, asks a
-few questions, writes a verified appeal letter, and chases it until there's an
-outcome — dollars recovered, not drafts generated.
+**Live:** https://advocate.kiter0211.workers.dev · [Presentation deck](https://docs.google.com/presentation/d/1KzmcoL_hZ0OVeCIDtVw0p1noJfDHZ4xg6urHDI5hKz8/edit?usp=sharing)
 
-**Live:** https://advocate.kiter0211.workers.dev
-Built for the **AI Builders Hackathon 2026** (Devpost). One dispute type in v1:
-US medical bills / claim denials.
+One dispute type in v1: US medical bills / claim denials.
+
+## The problem
+
+- **85%** of denied medical claims are never appealed — yet **~80%** of appeals that are filed win.
+- Up to **80%** of medical bills contain errors.
+- Appealing is a second job: decode the bill and the EOB, write a formal letter with exact amounts and line references, find the right portal, then chase it for weeks. AI chatbots hand you a draft and walk away. Patients give up — they don't opt out.
+
+**The gap isn't knowledge. It's follow-through.**
+
+## The solution
+
+Advocate is an AI advocate that finishes the job. Upload a bill or denial letter — no account — and it finds what's wrong, asks a few questions, writes an appeal letter that **verifies itself twice** (and blocks approval when it can't), files it with you, and chases it until there's an outcome.
+
+The product measures itself in **dollars recovered, not drafts generated.**
+
+> **60-second try:** open the live URL → tap **“Try with a sample bill”**
+> (synthetic $1,840 duplicate charge, no real data) → findings land in ~1–3 min
+> → answer 3–4 tap questions → brief → verified letter → approve → filing guide
+> → record outcome. Full flow, no signup.
+> Sample docs also in [`docs/test-docs/`](./docs/test-docs/).
 
 ## The product (v1, shipped)
 
@@ -19,6 +35,33 @@ US medical bills / claim denials.
 7. **Track** — filing record, 21-day check-in alarm, outcome capture (`won / reduced / denied / waiting`), recovered-dollars result card, denial escalation ladder, one-question willingness-to-pay survey.
 
 Nothing is ever sent to an insurer or provider without explicit user approval.
+
+## Vision & roadmap
+
+Billing disputes are everywhere — medical bills are just the wedge. The engine underneath (extract → verify → approve → chase → outcome) generalizes to any dispute where an ordinary person faces paperwork asymmetry.
+
+1. **Voice follow-ups** — the advocate calls the insurer on an approved script, with transcripts and logged outcomes. (Designed for v1, cut for scope; the letter-to-outcome loop had to be genuinely complete first.)
+2. **More dispute types** — subscriptions, security deposits, tolls, chargebacks on the same loop.
+3. **Response parsing → auto-escalation** — payer replies parsed into next steps: external review, state insurance complaint, financial assistance.
+4. **Outcome-based pricing** — $29–99 per dispute or a share of recovered dollars, validated by the willingness-to-pay survey already running on every outcome card.
+
+Long-term: the trusted layer between people and bureaucracy — an advocate that keeps working after you close the tab, for any bill that looks wrong.
+
+## How a case flows
+
+```
+upload → reading → needs_info → ready_for_review → approved → filed → resolved
+   (photo/PDF,    (extract +    (answer 1–6      (brief +        (letter     (guide +    (outcome:
+    201 in ms)     rules +        grounded         verified        locked,     print +     won / reduced /
+                   questions)     questions)       letter)         file it)    21-day      denied / waiting)
+                                                                          check-ins)
+```
+
+- Case statuses: `uploaded → reading → needs_info → ready_for_review → approved → filed → in_followup / resolved / closed`.
+- Letter statuses: `draft` (approvable) · `needs_review` (blocked server-side until fixed) · `approved` (immutable, filing starts from it).
+- Outcomes: `won_full / reduced / denied / no_response`, with `amountRecoveredCents` and a one-question willingness-to-pay survey (`yes / if_wins / no`).
+- The pipeline runs in `waitUntil`: uploads return `201` instantly while extraction, rules, and question generation run in the background; the case page polls to findings. Every failure — scanned PDF, model hiccup, verifier outage — lands as an explicit timeline event. A case never silently sits in `reading`.
+- A per-case Durable Object (`CaseAgent`) owns the clock: 21-day filing check-ins, deadline reminders, and storage purge on retention sweep.
 
 ## Architecture
 
@@ -53,6 +96,51 @@ advocate/
 - **Findings** are computed by deterministic rules over validated data — no model vibes.
 - **Letters** pass a regex-level amount/line check *and* an independent semantic audit; failures surface as `needs_review` with specific reasons and block approval server-side.
 - **Human approval gate** is enforced in the API, not just the UI.
+
+## Tech stack
+
+| Layer | Choice |
+|---|---|
+| Edge + API | Cloudflare Workers, Hono, strict TypeScript |
+| Data | D1 (cases, documents, extractions, findings, questions, letters, outcomes) — 7 migrations |
+| Files | R2 (`advocate-docs`) |
+| Agents/clock | Durable Objects (`CaseAgent`: reminders, 21-day alarms, purge) + daily cron sweep |
+| Frontend | React 19 + Vite, mobile-first, no accounts (signed claim links) |
+| AI | Any OpenAI-compatible gateway over plain `fetch` (default: DGrid; vision model verified at <$0.001/case). Anthropic client included as fallback. No vendor SDKs — provider-swappable |
+| PDF text | `unpdf` (serverless PDF.js); scanned PDFs fail to an honest “send photos” path |
+
+## API reference
+
+All case routes are passwordless via signed expiring claim tokens (`?token=` or `{token}` in JSON bodies). Errors use a fixed `{error: {code, message}}` envelope — no stack traces, no PHI in logs.
+
+| Method & path | Purpose |
+|---|---|
+| `GET /api/health` | Liveness probe |
+| `POST /api/cases` | Multipart upload (`file`, `disputeType`) → `201 {caseId, claimToken}` |
+| `GET /api/cases/:id?token=` | Full public case view (timeline, findings, explainer, questions, summary, letter, filing guide, outcome) |
+| `POST /api/cases/:id/questions` | Generate (idempotent) or return intake questions |
+| `POST /api/cases/:id/answers` | Submit answers → builds brief, auto-drafts letter in background |
+| `POST /api/cases/:id/letter` | Return latest letter, drafting if missing (idempotent) |
+| `POST /api/cases/:id/letter/edit` | New re-verified version (blocked when approved; `409 STALE` on version mismatch) |
+| `POST /api/cases/:id/letter/approve` | Approve — rejected with `409 UNVERIFIED` unless the draft is fully clean |
+| `POST /api/cases/:id/filed` | Record filing channel → starts the 21-day DO check-in |
+| `POST /api/cases/:id/outcome` | Record `won_full / reduced / denied / no_response` + recovered dollars |
+| `POST /api/cases/:id/outcome/wtp` | One-question willingness-to-pay (`yes / if_wins / no`) |
+
+Uploads are validated three ways (declared-type allowlist, magic-byte sniffing, 15 MB cap) with per-IP rate limiting. Document bytes are untrusted data and are never interpolated into prompts as instructions.
+
+## Configuration
+
+`wrangler.jsonc` vars (sane defaults included):
+
+| Var | Default | Meaning |
+|---|---|---|
+| `LLM_BASE_URL` / `LLM_MODEL` | DGrid / `google/gemini-2.5-flash-lite` | Model endpoint (any OpenAI-compatible API) |
+| `CLAIM_TOKEN_TTL_SECONDS` | `7776000` (90 days) | Claim-link lifetime |
+| `DATA_RETENTION_DAYS` | `90` | Auto-delete horizon (D1 + R2 + DO storage) |
+| `MAX_UPLOAD_BYTES` | `15728640` (15 MB) | Upload cap |
+
+Secrets (never in repo): `CLAIM_TOKEN_SECRET`, `LLM_API_KEY` — see [Checks & deploy](#checks--deploy). Local dev uses `.dev.vars` (`cp .dev.vars.example .dev.vars`); without `LLM_API_KEY` the pipeline fails closed with an honest error instead of guessing.
 
 ## Quickstart
 

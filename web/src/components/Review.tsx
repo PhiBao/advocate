@@ -150,11 +150,14 @@ export default function Review({ kase, caseId, token, onChange }: Props) {
             <Body text={letter.bodyMd} />
             {letter.citations.length > 0 && (
               <div style={{ marginTop: 12, fontSize: 13, color: "var(--ink-soft)" }}>
-                Checked against your documents
-                {letter.citations.some((c) => /line/i.test(c.span))
-                  ? `: ${letter.citations.filter((c) => /line/i.test(c.span)).map((c) => c.span).join(", ")}`
-                  : ""}
-                .
+                ✓ Checked against your documents
+                {(() => {
+                  const refs = [...new Set(
+                    letter.citations.filter((c) => /line/i.test(c.span)).map((c) => c.span),
+                  )];
+                  return refs.length > 0 ? `: ${refs.join(", ")}` : "";
+                })()}
+                {" "}· amounts + line refs verified, then independently audited.
               </div>
             )}
           </>
@@ -169,6 +172,7 @@ export default function Review({ kase, caseId, token, onChange }: Props) {
               style={{ marginTop: 0 }}
               type="button"
               disabled={busy || letter.status !== "draft"}
+              title={letter.status !== "draft" ? "Fix the flagged items — approval is locked server-side until everything verifies" : "Approve — nothing is sent anywhere, this just unlocks filing"}
               onClick={() => void run(() => approveLetter(caseId, token, letter.version))}
             >
               {letter.status === "draft" ? "Approve this letter" : "Fix issues to approve"}

@@ -77,7 +77,10 @@ export default function UploadCard({ onCreated }: Props) {
       />
       {error ? <div className="error-box" role="alert">{error}</div> : null}
       <div className="privacy-note" aria-label="Privacy note">
-        <span aria-hidden="true">🔒</span>
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true" style={{ flexShrink: 0, marginTop: 2 }}>
+          <rect x="3" y="7" width="10" height="7" rx="2" fill="var(--accent-deep)" />
+          <path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" stroke="var(--accent-deep)" strokeWidth="1.8" fill="none" />
+        </svg>
         <span>
           No account needed. Please black out your Social Security number — we never need it.
           Your file auto-deletes. <a href="#/privacy">How we handle your data</a>

@@ -17,7 +17,7 @@ export default function Privacy() {
         </li>
         <li>
           <strong>Auto-deletion.</strong> Cases and uploaded files are automatically deleted after
-          90 days, or immediately when you close a case.
+          90 days via a daily sweep covering the database, file storage, and reminders.
         </li>
         <li>
           <strong>No training on your documents.</strong> Your bills are never used to train

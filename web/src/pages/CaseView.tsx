@@ -74,10 +74,11 @@ export default function CaseView({ caseId, token }: Props) {
       }
     }
     void load();
-    // Poll fast while the agent is working; back off once things settle.
+    // Poll every 4s: snappy enough for the live demo / judging walkthrough
+    // without hammering D1. Explicit user actions refresh immediately too.
     const t = window.setInterval(() => {
       void refresh();
-    }, 10_000);
+    }, 4000);
     return () => {
       cancelled = true;
       window.clearInterval(t);
